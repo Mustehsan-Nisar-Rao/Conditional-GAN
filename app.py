@@ -207,7 +207,7 @@ with st.sidebar:
     """)
 
 # Load model (from GitHub release)
-weights_url = "https://github.com/Mustehsan-Nisar-Rao/Conditional-GAN/releases/download/v1.0/best_generator.pth"
+weights_url = "https://github.com/Mustehsan-Nisar-Rao/Conditional-GAN/releases/download/v.1/best_generator.pth"
 
 generator = load_model(weights_url, device)
 
