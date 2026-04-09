@@ -10,7 +10,7 @@ from io import BytesIO
 warnings.filterwarnings('ignore')
 
 # ============================================
-# MODEL ARCHITECTURE
+# MODEL ARCHITECTURE (Same - No change)
 # ============================================
 
 class EncoderBlock(nn.Module):
@@ -98,7 +98,7 @@ class Generator(nn.Module):
         return self.final(torch.cat([d7, e1], dim=1))
 
 # ============================================
-# HELPER FUNCTIONS
+# HELPER FUNCTIONS (Same - No change)
 # ============================================
 
 @st.cache_resource
@@ -164,7 +164,7 @@ def postprocess_image(tensor):
     return Image.fromarray(img_array)
 
 # ============================================
-# STREAMLIT UI
+# STREAMLIT UI (Only error lines fixed)
 # ============================================
 
 st.set_page_config(
@@ -203,7 +203,7 @@ with st.sidebar:
     - Best results with face/sketch drawings
     """)
 
-# Sample images (raw GitHub URLs)
+# Sample images
 sample_images = {
     "Sample 1": "https://raw.githubusercontent.com/Mustehsan-Nisar-Rao/Conditional-GAN/main/1014091%20(1).png",
     "Sample 2": "https://raw.githubusercontent.com/Mustehsan-Nisar-Rao/Conditional-GAN/main/1014091.png",
@@ -231,7 +231,7 @@ with col1:
         )
         if uploaded_file:
             input_image = Image.open(uploaded_file)
-            st.image(input_image, caption="Your Sketch")
+            st.image(input_image, caption="Your Sketch")  # ✅ FIXED: Removed use_container_width
     
     with tab2:
         selected_sample = st.selectbox("Select a sample sketch:", list(sample_images.keys()), key="sample")
@@ -239,7 +239,7 @@ with col1:
             try:
                 response = requests.get(sample_images[selected_sample])
                 input_image = Image.open(BytesIO(response.content))
-                st.image(input_image, caption=f"Sample: {selected_sample}")
+                st.image(input_image, caption=f"Sample: {selected_sample}")  # ✅ FIXED: Removed use_container_width
                 st.success("Sample loaded! Click 'Generate Anime' below.")
             except Exception as e:
                 st.error(f"Error loading sample: {e}")
@@ -267,7 +267,7 @@ with col2:
                     output_image = postprocess_image(output_tensor)
                     
                     # Display
-                    output_placeholder.image(output_image, caption="Generated Anime")
+                    output_placeholder.image(output_image, caption="Generated Anime")  # ✅ FIXED: Removed use_container_width
                     
                     # Download button
                     buf = io.BytesIO()
@@ -279,7 +279,7 @@ with col2:
                         data=byte_im,
                         file_name="generated_anime.png",
                         mime="image/png",
-                        use_container_width=True
+                        use_container_width=True  # ✅ This is fine for buttons
                     )
                     
                     st.success("✅ Generation complete!")
