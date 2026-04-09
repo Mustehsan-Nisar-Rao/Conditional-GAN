@@ -10,7 +10,7 @@ from io import BytesIO
 warnings.filterwarnings('ignore')
 
 # ============================================
-# MODEL ARCHITECTURE (Same - No change)
+# MODEL ARCHITECTURE
 # ============================================
 
 class EncoderBlock(nn.Module):
@@ -98,34 +98,28 @@ class Generator(nn.Module):
         return self.final(torch.cat([d7, e1], dim=1))
 
 # ============================================
-# HELPER FUNCTIONS (Same - No change)
+# HELPER FUNCTIONS
 # ============================================
 
 @st.cache_resource
 def load_model():
-    """Load the generator model with trained weights"""
     model = Generator(in_channels=3, out_channels=3)
     device = "cpu"
     
-    # Try to load from local file first
     weights_path = "best_generator.pth"
     
     try:
-        # Check if file exists locally
         import os
         if not os.path.exists(weights_path):
-            # Download from GitHub release
             with st.spinner("Downloading model weights..."):
-                url = "https://github.com/Mustehsan-Nisar-Rao/Conditional-GAN/releases/download/v.1/best_generator.pth"
+                url = "https://github.com/Mustehsan-Nisar-Rao/Conditional-GAN/releases/download/v1.0/best_generator.pth"
                 response = requests.get(url, timeout=30)
                 response.raise_for_status()
                 with open(weights_path, "wb") as f:
                     f.write(response.content)
         
-        # Load weights
         state_dict = torch.load(weights_path, map_location=device)
         
-        # Handle DataParallel weights
         from collections import OrderedDict
         new_state_dict = OrderedDict()
         for k, v in state_dict.items():
@@ -143,7 +137,6 @@ def load_model():
         return None, None
 
 def preprocess_image(image, target_size=256):
-    """Preprocess input image for the model"""
     if image.mode != 'RGB':
         image = image.convert('RGB')
     
@@ -156,7 +149,6 @@ def preprocess_image(image, target_size=256):
     return img_tensor
 
 def postprocess_image(tensor):
-    """Convert model output tensor to PIL image"""
     tensor = tensor.squeeze(0).cpu().detach()
     tensor = (tensor + 1) / 2
     tensor = torch.clamp(tensor, 0, 1)
@@ -164,7 +156,7 @@ def postprocess_image(tensor):
     return Image.fromarray(img_array)
 
 # ============================================
-# STREAMLIT UI (Only error lines fixed)
+# STREAMLIT UI
 # ============================================
 
 st.set_page_config(
@@ -181,7 +173,6 @@ st.markdown("Upload a sketch or drawing, and the AI will generate an anime-style
 generator, device = load_model()
 
 if generator is None:
-    st.error("❌ Failed to load model. Please check the model file.")
     st.stop()
 
 # Sidebar
@@ -221,25 +212,24 @@ with col1:
     # Tab for upload vs sample
     tab1, tab2 = st.tabs(["🖼️ Upload Sketch", "🎨 Try Samples"])
     
-    input_image = None
+    input_image = None  # ✅ FIX: Define here
     
     with tab1:
         uploaded_file = st.file_uploader(
             "Choose a sketch/image...",
-            type=['png', 'jpg', 'jpeg', 'webp'],
-            key="upload"
+            type=['png', 'jpg', 'jpeg', 'webp']
         )
         if uploaded_file:
             input_image = Image.open(uploaded_file)
-            st.image(input_image, caption="Your Sketch")  # ✅ FIXED: Removed use_container_width
+            st.image(input_image, caption="Your Sketch", width=400)
     
     with tab2:
-        selected_sample = st.selectbox("Select a sample sketch:", list(sample_images.keys()), key="sample")
+        selected_sample = st.selectbox("Select a sample sketch:", list(sample_images.keys()))
         if st.button("Load Sample", use_container_width=True):
             try:
                 response = requests.get(sample_images[selected_sample])
                 input_image = Image.open(BytesIO(response.content))
-                st.image(input_image, caption=f"Sample: {selected_sample}")  # ✅ FIXED: Removed use_container_width
+                st.image(input_image, caption=f"Sample: {selected_sample}", width=400)
                 st.success("Sample loaded! Click 'Generate Anime' below.")
             except Exception as e:
                 st.error(f"Error loading sample: {e}")
@@ -256,20 +246,15 @@ with col2:
         else:
             with st.spinner("Generating anime image... 🎨"):
                 try:
-                    # Preprocess
                     input_tensor = preprocess_image(input_image)
                     
-                    # Generate
                     with torch.no_grad():
                         output_tensor = generator(input_tensor)
                     
-                    # Postprocess
                     output_image = postprocess_image(output_tensor)
                     
-                    # Display
-                    output_placeholder.image(output_image, caption="Generated Anime")  # ✅ FIXED: Removed use_container_width
+                    output_placeholder.image(output_image, caption="Generated Anime", width=400)
                     
-                    # Download button
                     buf = io.BytesIO()
                     output_image.save(buf, format="PNG")
                     byte_im = buf.getvalue()
@@ -279,7 +264,7 @@ with col2:
                         data=byte_im,
                         file_name="generated_anime.png",
                         mime="image/png",
-                        use_container_width=True  # ✅ This is fine for buttons
+                        use_container_width=True
                     )
                     
                     st.success("✅ Generation complete!")
