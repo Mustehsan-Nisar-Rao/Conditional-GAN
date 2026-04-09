@@ -18,10 +18,7 @@ Output →  Fully Colored Anime Image
 
 | Input Sketch | Generated Color | Ground Truth |
 |:---:|:---:|:---:|
-| ![sketch](assets/sketch1.png) | ![generated](assets/generated1.png) | ![real](assets/real1.png) |
-| ![sketch](assets/sketch2.png) | ![generated](assets/generated2.png) | ![real](assets/real2.png) |
-
----
+| <img width="215" height="214" src="https://github.com/user-attachments/assets/fdecf9d2-6d84-4a78-8637-f5bd6515b063" /> | <img width="197" height="215" src="https://github.com/user-attachments/assets/76e89940-e6eb-43e8-ad45-6df0ecd64052" /> | <img width="198" height="213" src="https://github.com/user-attachments/assets/15689e65-57df-4e42-a959-51efd81aeeb7" /> |
 
 ## Project Structure
 
