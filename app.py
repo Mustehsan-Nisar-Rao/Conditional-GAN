@@ -4,7 +4,10 @@ import torch.nn as nn
 from PIL import Image
 import numpy as np
 import io
-from skimage import img_as_ubyte
+import warnings
+import requests
+from io import BytesIO
+warnings.filterwarnings('ignore')
 
 # ============================================
 # MODEL ARCHITECTURE (Same as your training)
@@ -99,35 +102,60 @@ class Generator(nn.Module):
 # ============================================
 
 @st.cache_resource
-def load_model(weights_path, device):
-    """Load the generator model with trained weights"""
+def load_model(weights_url, device):
+    """Load the generator model with trained weights from URL"""
     model = Generator(in_channels=3, out_channels=3)
     
-    # Load weights
-    state_dict = torch.load(weights_path, map_location=device)
-    
-    # Handle DataParallel weights if present
-    from collections import OrderedDict
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        name = k.replace("module.", "")
-        new_state_dict[name] = v
-    
-    model.load_state_dict(new_state_dict)
-    model.to(device)
-    model.eval()
-    return model
+    try:
+        # Download weights from GitHub
+        with st.spinner("Downloading model weights..."):
+            response = requests.get(weights_url, timeout=30)
+            response.raise_for_status()
+            
+            # Save temporarily
+            temp_path = "/tmp/best_generator.pth"
+            with open(temp_path, "wb") as f:
+                f.write(response.content)
+            
+            # Load with proper handling
+            state_dict = torch.load(temp_path, map_location=device, weights_only=False)
+            
+            # Handle DataParallel weights
+            from collections import OrderedDict
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                name = k.replace("module.", "")
+                new_state_dict[name] = v
+            
+            model.load_state_dict(new_state_dict, strict=True)
+            model.to(device)
+            model.eval()
+            
+            st.success("✅ Model loaded successfully!")
+            return model
+            
+    except Exception as e:
+        st.error(f"Error loading model: {str(e)}")
+        st.error("Trying fallback method...")
+        
+        # Fallback: Try loading with weights_only=False
+        try:
+            state_dict = torch.load(temp_path, map_location=device, weights_only=False)
+            model.load_state_dict(state_dict)
+            model.to(device)
+            model.eval()
+            return model
+        except Exception as e2:
+            st.error(f"Fallback also failed: {str(e2)}")
+            return None
 
 def preprocess_image(image, target_size=256):
     """Preprocess input image for the model"""
-    # Convert to RGB if needed
     if image.mode != 'RGB':
         image = image.convert('RGB')
     
-    # Resize
     image = image.resize((target_size, target_size), Image.Resampling.LANCZOS)
     
-    # Convert to tensor and normalize to [-1, 1]
     img_array = np.array(image).astype(np.float32)
     img_array = (img_array / 127.5) - 1.0
     img_tensor = torch.from_numpy(img_array).permute(2, 0, 1).unsqueeze(0)
@@ -136,12 +164,9 @@ def preprocess_image(image, target_size=256):
 
 def postprocess_image(tensor):
     """Convert model output tensor to PIL image"""
-    # Denormalize from [-1, 1] to [0, 255]
     tensor = tensor.squeeze(0).cpu().detach()
     tensor = (tensor + 1) / 2
     tensor = torch.clamp(tensor, 0, 1)
-    
-    # Convert to numpy and then to PIL
     img_array = (tensor.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
     return Image.fromarray(img_array)
 
@@ -152,102 +177,92 @@ def postprocess_image(tensor):
 st.set_page_config(
     page_title="Sketch to Anime - Conditional GAN",
     page_icon="🎨",
-    layout="centered"
+    layout="wide"
 )
 
 st.title("🎨 Sketch to Anime Generator")
 st.markdown("### Conditional GAN (Pix2Pix) based Anime Generator")
-st.markdown("Upload a sketch or drawing, and the AI will generate an anime-style image!")
 
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Settings")
     st.markdown("---")
     
-    # Device selection
-    device_option = st.radio(
-        "Compute Device",
-        options=["Auto", "CPU", "CUDA"],
-        help="Auto will use GPU if available"
-    )
+    device = "cpu"  # Force CPU for compatibility
+    st.info(f"🖥️ Using device: **{device.upper()}**")
     
     st.markdown("---")
     st.markdown("### 📝 Instructions")
     st.markdown("""
-    1. Upload a sketch or drawing
-    2. Wait for processing
-    3. See the magic happen!
+    1. Upload a sketch OR choose a sample
+    2. Click 'Generate Anime'
+    3. Download your result!
     """)
     
     st.markdown("---")
     st.markdown("### 🎯 Tips")
     st.markdown("""
     - Use clear sketches with defined edges
-    - Image will be resized to 256x256
     - Best results with face/sketch drawings
     """)
 
-# Determine device
-if device_option == "Auto":
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-elif device_option == "CUDA":
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-else:
-    device = "cpu"
+# Load model (from GitHub release)
+weights_url = "https://github.com/Mustehsan-Nisar-Rao/Conditional-GAN/releases/download/v1.0/best_generator.pth"
 
-st.info(f"🖥️ Using device: **{device.upper()}**")
+generator = load_model(weights_url, device)
 
-# Load model
-@st.cache_resource
-def get_model():
-    # Download from GitHub release if not present locally
-    weights_path = "best_generator.pth"
-    
-    # For Streamlit Cloud, we need to download from release
-    import os
-    if not os.path.exists(weights_path):
-        with st.spinner("Downloading model weights from GitHub release..."):
-            import requests
-            url = "https://github.com/Mustehsan-Nisar-Rao/Conditional-GAN/releases/download/v1.0/best_generator.pth"
-            response = requests.get(url)
-            with open(weights_path, "wb") as f:
-                f.write(response.content)
-    
-    return load_model(weights_path, device)
-
-try:
-    generator = get_model()
-    st.success("✅ Model loaded successfully!")
-except Exception as e:
-    st.error(f"❌ Error loading model: {str(e)}")
+if generator is None:
     st.stop()
 
-# File uploader
-uploaded_file = st.file_uploader(
-    "Choose a sketch/image...",
-    type=['png', 'jpg', 'jpeg', 'webp'],
-    help="Upload your sketch or drawing"
-)
+# Sample images
+sample_images = {
+    "Sample 1": "https://raw.githubusercontent.com/Mustehsan-Nisar-Rao/Conditional-GAN/main/1014091%20(1).png",
+    "Sample 2": "https://raw.githubusercontent.com/Mustehsan-Nisar-Rao/Conditional-GAN/main/1014091.png",
+    "Sample 3": "https://raw.githubusercontent.com/Mustehsan-Nisar-Rao/Conditional-GAN/main/1014092.png",
+    "Sample 4": "https://raw.githubusercontent.com/Mustehsan-Nisar-Rao/Conditional-GAN/main/1014093.png",
+    "Sample 5": "https://raw.githubusercontent.com/Mustehsan-Nisar-Rao/Conditional-GAN/main/1014094.png"
+}
 
-# Example images
-with st.expander("📷 Try with example images"):
-    st.markdown("Coming soon! You can upload your own sketches for now.")
+# Main content - Two columns
+col1, col2 = st.columns(2)
 
-# Main processing
-if uploaded_file is not None:
-    # Display uploaded image
-    col1, col2 = st.columns(2)
+with col1:
+    st.subheader("📤 Input")
     
-    original_image = Image.open(uploaded_file)
-    col1.markdown("### 📤 Input Sketch")
-    col1.image(original_image, use_container_width=True)
+    # Tab for upload vs sample
+    tab1, tab2 = st.tabs(["🖼️ Upload Sketch", "🎨 Try Samples"])
     
-    # Generate button
-    if st.button("✨ Generate Anime", type="primary", use_container_width=True):
+    with tab1:
+        uploaded_file = st.file_uploader(
+            "Choose a sketch/image...",
+            type=['png', 'jpg', 'jpeg', 'webp']
+        )
+        input_image = None
+        if uploaded_file:
+            input_image = Image.open(uploaded_file)
+            st.image(input_image, caption="Your Sketch", use_container_width=True)
+    
+    with tab2:
+        selected_sample = st.selectbox("Select a sample sketch:", list(sample_images.keys()))
+        if st.button("Load Sample", use_container_width=True):
+            try:
+                response = requests.get(sample_images[selected_sample])
+                input_image = Image.open(BytesIO(response.content))
+                st.image(input_image, caption=f"Sample: {selected_sample}", use_container_width=True)
+            except Exception as e:
+                st.error(f"Error loading sample: {e}")
+    
+    generate_btn = st.button("✨ Generate Anime", type="primary", use_container_width=True)
+
+with col2:
+    st.subheader("✨ Output")
+    output_placeholder = st.empty()
+    
+    if generate_btn and input_image:
         with st.spinner("Generating anime image... 🎨"):
             try:
                 # Preprocess
-                input_tensor = preprocess_image(original_image).to(device)
+                input_tensor = preprocess_image(input_image).to(device)
                 
                 # Generate
                 with torch.no_grad():
@@ -256,9 +271,8 @@ if uploaded_file is not None:
                 # Postprocess
                 output_image = postprocess_image(output_tensor)
                 
-                # Display result
-                col2.markdown("### ✨ Generated Anime")
-                col2.image(output_image, use_container_width=True)
+                # Display
+                output_placeholder.image(output_image, caption="Generated Anime", use_container_width=True)
                 
                 # Download button
                 buf = io.BytesIO()
@@ -266,18 +280,16 @@ if uploaded_file is not None:
                 byte_im = buf.getvalue()
                 
                 st.download_button(
-                    label="💾 Download Generated Image",
+                    label="💾 Download Result",
                     data=byte_im,
                     file_name="generated_anime.png",
                     mime="image/png",
                     use_container_width=True
                 )
                 
-                st.success("✅ Generation complete!")
-                
             except Exception as e:
-                st.error(f"Error during generation: {str(e)}")
-                st.error("Please make sure your sketch is clear and try again.")
+                st.error(f"Generation failed: {str(e)}")
+                st.error("Please check if the model weights are compatible or try a different sketch.")
 
 # Footer
 st.markdown("---")
