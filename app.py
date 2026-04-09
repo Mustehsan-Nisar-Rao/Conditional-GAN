@@ -10,7 +10,7 @@ from io import BytesIO
 warnings.filterwarnings('ignore')
 
 # ============================================
-# MODEL ARCHITECTURE
+# MODEL ARCHITECTURE (Same as your original)
 # ============================================
 
 class EncoderBlock(nn.Module):
@@ -98,43 +98,24 @@ class Generator(nn.Module):
         return self.final(torch.cat([d7, e1], dim=1))
 
 # ============================================
-# HELPER FUNCTIONS
+# HELPER FUNCTIONS (Same as original)
 # ============================================
 
 @st.cache_resource
-def load_model():
+def load_model(weights_path, device):
     model = Generator(in_channels=3, out_channels=3)
-    device = "cpu"
+    state_dict = torch.load(weights_path, map_location=device)
     
-    weights_path = "best_generator.pth"
+    from collections import OrderedDict
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        name = k.replace("module.", "")
+        new_state_dict[name] = v
     
-    try:
-        import os
-        if not os.path.exists(weights_path):
-            with st.spinner("Downloading model weights..."):
-                url = "https://github.com/Mustehsan-Nisar-Rao/Conditional-GAN/releases/download/v1.0/best_generator.pth"
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
-                with open(weights_path, "wb") as f:
-                    f.write(response.content)
-        
-        state_dict = torch.load(weights_path, map_location=device)
-        
-        from collections import OrderedDict
-        new_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            name = k.replace("module.", "")
-            new_state_dict[name] = v
-        
-        model.load_state_dict(new_state_dict)
-        model.to(device)
-        model.eval()
-        
-        return model, device
-        
-    except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
-        return None, None
+    model.load_state_dict(new_state_dict)
+    model.to(device)
+    model.eval()
+    return model
 
 def preprocess_image(image, target_size=256):
     if image.mode != 'RGB':
@@ -170,16 +151,25 @@ st.markdown("### Conditional GAN (Pix2Pix) based Anime Generator")
 st.markdown("Upload a sketch or drawing, and the AI will generate an anime-style image!")
 
 # Load model
-generator, device = load_model()
+weights_path = "best_generator.pth"
+device = "cpu"
 
-if generator is None:
-    st.stop()
+# Download if not exists
+import os
+if not os.path.exists(weights_path):
+    with st.spinner("Downloading model from GitHub..."):
+        url = "https://github.com/Mustehsan-Nisar-Rao/Conditional-GAN/releases/download/v.1/best_generator.pth"
+        response = requests.get(url)
+        with open(weights_path, "wb") as f:
+            f.write(response.content)
+
+generator = load_model(weights_path, device)
 
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Settings")
     st.markdown("---")
-    st.info(f"🖥️ Using device: **CPU**")
+    st.info(f"🖥️ Using device: **{device.upper()}**")
     st.markdown("---")
     st.markdown("### 📝 Instructions")
     st.markdown("""
@@ -212,7 +202,7 @@ with col1:
     # Tab for upload vs sample
     tab1, tab2 = st.tabs(["🖼️ Upload Sketch", "🎨 Try Samples"])
     
-    input_image = None  # ✅ FIX: Define here
+    input_image = None  # ✅ SIRF YEH EK LINE ADD KI HAI
     
     with tab1:
         uploaded_file = st.file_uploader(
@@ -246,7 +236,7 @@ with col2:
         else:
             with st.spinner("Generating anime image... 🎨"):
                 try:
-                    input_tensor = preprocess_image(input_image)
+                    input_tensor = preprocess_image(input_image).to(device)
                     
                     with torch.no_grad():
                         output_tensor = generator(input_tensor)
